@@ -50,8 +50,19 @@ command and output directory above. Functions are discovered from the root
 Pages origin, so no browser-side backend key or cross-origin API call is
 needed.
 
-The seed catalog in `web/public/players.json` is intentionally small. Replace
-it with the roster/player catalog you want the UI to search.
+The player catalog in `web/public/players.json` is generated from nflverse's
+2026 roster release. It currently includes active QB, RB, WR, TE, and K players
+plus all 32 team defenses. Refresh it with:
+
+```bash
+python3 scripts/build_player_catalog.py
+```
+
+The generator uses the machine-readable
+[`roster_2026.csv`](https://github.com/nflverse/nflverse-data/releases/download/rosters/roster_2026.csv)
+release and keeps nflverse's canonical `gsis_id` as each player ID. nflverse
+publishes roster updates daily and documents the roster loader and release URL
+in its [`nflreadr` documentation](https://github.com/nflverse/nflreadr/blob/main/R/load_rosters.R).
 
 This is a small, standard-library-only Python implementation for an AWS Lambda behind API Gateway. It accepts a requested set of players, fetches only those players' props from the configured sportsbooks, averages matching lines, converts the result into fantasy points, and finds the highest-scoring legal lineup.
 
