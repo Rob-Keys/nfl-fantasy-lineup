@@ -50,6 +50,20 @@
             <span id="selected-count" class="count">0 players</span>
           </div>
 
+          <fieldset class="scoring-picker">
+            <legend>Scoring format</legend>
+            <div class="scoring-toggle">
+              <label>
+                <input type="radio" name="scoring-format" value="ppr" checked />
+                <span>PPR</span>
+              </label>
+              <label>
+                <input type="radio" name="scoring-format" value="half_ppr" />
+                <span>Half-PPR</span>
+              </label>
+            </div>
+          </fieldset>
+
           <div class="lineup-rule" aria-hidden="true"></div>
           <div id="selected-players" class="roster" aria-live="polite"></div>
           <section class="saved-teams" aria-labelledby="saved-teams-heading">
@@ -75,7 +89,7 @@
       <footer class="site-footer">
         <span>Built for the long game</span>
         <span class="footer-mark" aria-hidden="true">✳</span>
-        <span>Projection engine · PPR scoring</span>
+        <span id="scoring-footer">Projection engine · PPR scoring</span>
       </footer>
     </main>
     <script type="module" src="/src/main.ts"></script>

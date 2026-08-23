@@ -42,6 +42,8 @@ type SavedTeam = {
   playerIds: string[];
 };
 
+type ScoringFormat = 'ppr' | 'half_ppr';
+
 const STARTING_SLOTS: RosterSlot[] = [
   { id: 'qb', label: 'QB', position: 'QB' },
   { id: 'rb-1', label: 'RB', position: 'RB' },
@@ -73,9 +75,16 @@ const saveTeamButton = document.querySelector<HTMLButtonElement>('#save-team')!;
 const savedTeamsList = document.querySelector<HTMLDivElement>('#saved-teams-list')!;
 const savedTeamCount = document.querySelector<HTMLSpanElement>('#saved-team-count')!;
 const savedTeamStatus = document.querySelector<HTMLParagraphElement>('#saved-team-status')!;
+const scoringOptions = document.querySelectorAll<HTMLInputElement>('input[name="scoring-format"]');
+const scoringFooter = document.querySelector<HTMLSpanElement>('#scoring-footer')!;
 
 let players: Player[] = [];
 const selected = new Map<string, Player>();
+let scoringFormat: ScoringFormat = 'ppr';
+
+function scoringFormatLabel(format: ScoringFormat): string {
+  return format === 'ppr' ? 'PPR' : 'Half-PPR';
+}
 
 function createSavedTeamId(): string {
   return typeof crypto.randomUUID === 'function'
@@ -326,6 +335,7 @@ function renderGeneratedLineup(response: LineupResponse): void {
       <div>
         <p class="eyebrow">Recommended roster</p>
         <h3>Projected lineup</h3>
+        <p class="result-scoring">${scoringFormatLabel(scoringFormat)} scoring</p>
       </div>
       <div class="total-points"><b>${formatNumber(response.lineup.total_points)}</b><span>total pts</span></div>
     </div>
@@ -519,7 +529,7 @@ async function submitLineup(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         players: [...selected.values()],
-        scoring: 'ppr',
+        scoring: scoringFormat,
         lineup: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1 },
         sportsbooks: ['fanduel', 'draftkings']
       })
@@ -537,6 +547,19 @@ async function submitLineup(): Promise<void> {
     submitButton.disabled = !hasCompleteStartingLineup();
   }
 }
+
+scoringOptions.forEach((option) => {
+  option.addEventListener('change', () => {
+    if (option.checked && (option.value === 'ppr' || option.value === 'half_ppr')) {
+      scoringFormat = option.value;
+      scoringFooter.textContent = `Projection engine · ${scoringFormatLabel(scoringFormat)} scoring`;
+      if (!requestResult.hidden) {
+        requestResult.hidden = true;
+        requestStatus.textContent = 'Scoring changed. Generate again to recalculate.';
+      }
+    }
+  });
+});
 
 searchInput.addEventListener('input', renderResults);
 results.addEventListener('click', (event) => {
