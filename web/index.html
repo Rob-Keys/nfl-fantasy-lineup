@@ -35,7 +35,7 @@
           <label class="search-label" for="player-search">Name, position, or team</label>
           <div class="search-wrap">
             <span class="search-icon" aria-hidden="true">⌕</span>
-            <input id="player-search" type="search" placeholder="Try Josh Allen or QB" autocomplete="off" />
+            <input id="player-search" type="search" placeholder="Try Josh Allen or QB" autocomplete="off" spellcheck="false" autocorrect="off" />
           </div>
           <div id="player-results" class="player-list" aria-live="polite"></div>
           <p id="player-status" class="muted">Loading player catalog…</p>
@@ -52,9 +52,22 @@
 
           <div class="lineup-rule" aria-hidden="true"></div>
           <div id="selected-players" class="roster" aria-live="polite"></div>
+          <section class="saved-teams" aria-labelledby="saved-teams-heading">
+            <div class="saved-teams-heading">
+              <p id="saved-teams-heading" class="roster-group-label">Saved teams</p>
+              <span id="saved-team-count" class="saved-team-count"></span>
+            </div>
+            <div class="save-team-form">
+              <label class="sr-only" for="team-name">Team name</label>
+              <input id="team-name" class="team-name-input" type="text" maxlength="50" placeholder="Name this team" autocomplete="off" />
+              <button id="save-team" class="secondary-button" type="button" disabled>Save</button>
+            </div>
+            <div id="saved-teams-list" class="saved-team-list" aria-live="polite"></div>
+            <p id="saved-team-status" class="muted saved-team-status">Saved teams stay in this browser.</p>
+          </section>
           <button id="submit-lineup" type="button" disabled>Generate lineup <span aria-hidden="true">→</span></button>
           <p id="request-status" class="status" role="status"></p>
-          <pre id="request-result" class="result" hidden></pre>
+          <div id="request-result" class="result" aria-live="polite" hidden></div>
         </section>
       </div>
 

@@ -97,4 +97,14 @@ The FanDuel, BetMGM, and DraftKings adapters make the on-demand HTTP request but
 python -m unittest discover -s tests -v
 ```
 
-The tests use `StaticSportsbook`, so they do not make network requests. Package `fantasy_lineup.handler.lambda_handler` as the Lambda handler.
+The tests use `StaticSportsbook`, so they do not make network requests. Deploy the current backend package with:
+
+```bash
+scripts/deploy_backend.sh
+```
+
+The backend script updates the existing `fantasyLineupGenerator` Lambda and
+keeps its timeout below the API Gateway integration timeout. The Lambda must
+already have `BACKEND_SHARED_SECRET` configured; the script deliberately does
+not read or print that secret. Frontend deployments are handled by the
+existing GitHub-connected Cloudflare Pages project.
