@@ -36,7 +36,7 @@ h1 { font-size: clamp(3.5rem, 8vw, 7rem); letter-spacing: -.065em; line-height: 
 h1 em { color: var(--gold); font-style: italic; }
 h2 { font-size: clamp(1.55rem, 3vw, 2.2rem); letter-spacing: -.04em; line-height: 1; }
 .lede { max-width: 510px; margin: 24px 0 0; color: var(--ink-soft); font-size: 1rem; line-height: 1.65; }
-.workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(330px, .85fr); gap: 18px; align-items: start; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr) minmax(320px, 1fr); gap: 18px; align-items: start; }
 .panel { padding: 28px; border: 1px solid var(--ink); background: var(--paper); }
 .picker-panel { min-height: 520px; }
 .lineup-panel { position: sticky; top: 20px; background: var(--paper-deep); }
@@ -102,6 +102,7 @@ button#submit-lineup:hover:not(:disabled) { border-color: var(--gold); backgroun
 button#submit-lineup:disabled { cursor: not-allowed; opacity: .42; }
 .status { min-height: 1.3em; margin: 14px 0 0; color: var(--gold); font-size: .82rem; }
 .result { margin: 12px 0 0; padding: 17px; border: 1px solid var(--line); color: var(--ink); background: var(--paper); }
+.projection-result { grid-column: 3; margin-top: 0; }
 .result-header { display: flex; align-items: end; justify-content: space-between; gap: 14px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
 .result-header .eyebrow { margin-bottom: 7px; font-size: .6rem; }
 .result-header h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.45rem; font-weight: 400; letter-spacing: -.035em; }
@@ -133,6 +134,7 @@ button#submit-lineup:disabled { cursor: not-allowed; opacity: .42; }
   .shell { width: min(100% - 28px, 560px); padding-top: 18px; }
   .intro { padding: 58px 0 40px; }
   .workspace { grid-template-columns: 1fr; }
+  .projection-result { grid-column: auto; }
   .lineup-panel { position: static; }
   .site-footer { align-items: flex-start; font-size: .6rem; }
   .site-footer span:first-child, .site-footer span:last-child { max-width: 130px; }
