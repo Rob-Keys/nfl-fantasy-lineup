@@ -25,6 +25,31 @@ is a server-to-server gate, not CORS; anyone can still call the public
 Cloudflare route, so add user authentication later if the site itself must be
 private.
 
+### Cloudflare Pages setup
+
+Connect the GitHub repository `Rob-Keys/nfl-fantasy-lineup` to a Cloudflare
+Pages project, or create the project with Wrangler:
+
+```bash
+npx wrangler login
+npx wrangler pages project create nfl-fantasy-lineup
+npx wrangler pages secret put BACKEND_SHARED_SECRET --project-name nfl-fantasy-lineup
+```
+
+Set `BACKEND_API_URL` as a production Pages Function variable. Set
+`BACKEND_SHARED_SECRET` as a production secret, then configure the same secret
+in the Lambda environment. Generate it once and keep it out of Git:
+
+```bash
+openssl rand -base64 32
+```
+
+If using the GitHub integration, configure the Pages project with the build
+command and output directory above. Functions are discovered from the root
+`functions/` directory automatically. The browser calls `/api/lineup` on the
+Pages origin, so no browser-side backend key or cross-origin API call is
+needed.
+
 The seed catalog in `web/public/players.json` is intentionally small. Replace
 it with the roster/player catalog you want the UI to search.
 
