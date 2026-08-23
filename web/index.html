@@ -4,43 +4,65 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="NFL fantasy lineup generator" />
-    <title>NFL Fantasy Lineup</title>
+    <title>Roster Room · NFL Fantasy Lineup</title>
   </head>
   <body>
     <main class="shell">
-      <header>
-        <p class="eyebrow">Fantasy football</p>
-        <h1>Build your lineup</h1>
-        <p class="lede">Search your players, select your roster, and send it to the lineup engine.</p>
+      <header class="site-header">
+        <div class="brand-lockup" aria-label="Roster Room">
+          <span class="brand-mark" aria-hidden="true">R</span>
+          <span class="brand-name">Roster Room</span>
+        </div>
+        <p class="header-note">NFL fantasy lineup builder</p>
       </header>
 
-      <section class="card" aria-labelledby="player-heading">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Roster</p>
-            <h2 id="player-heading">Select players</h2>
-          </div>
-          <span id="selected-count" class="count">0 selected</span>
-        </div>
-
-        <label class="search-label" for="player-search">Search by name, position, or team</label>
-        <input id="player-search" type="search" placeholder="Try Josh Allen or QB" autocomplete="off" />
-        <div id="player-results" class="player-list" aria-live="polite"></div>
-        <p id="player-status" class="muted">Loading player catalog…</p>
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">Sunday, simplified</p>
+        <h1 id="page-title">Build a better<br /><em>lineup.</em></h1>
+        <p class="lede">Choose the players you trust. We’ll do the math and return the strongest legal roster.</p>
       </section>
 
-      <section class="card" aria-labelledby="selected-heading">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Request</p>
-            <h2 id="selected-heading">Your selected players</h2>
+      <div class="workspace">
+        <section class="panel picker-panel" aria-labelledby="player-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">01 / Player pool</p>
+              <h2 id="player-heading">Choose your players</h2>
+            </div>
+            <span class="step-label">Search + add</span>
           </div>
-        </div>
-        <div id="selected-players" class="selected-list"></div>
-        <button id="submit-lineup" type="button" disabled>Generate lineup</button>
-        <p id="request-status" class="status" role="status"></p>
-        <pre id="request-result" class="result" hidden></pre>
-      </section>
+
+          <label class="search-label" for="player-search">Name, position, or team</label>
+          <div class="search-wrap">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input id="player-search" type="search" placeholder="Try Josh Allen or QB" autocomplete="off" />
+          </div>
+          <div id="player-results" class="player-list" aria-live="polite"></div>
+          <p id="player-status" class="muted">Loading player catalog…</p>
+        </section>
+
+        <section class="panel lineup-panel" aria-labelledby="selected-heading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">02 / Your roster</p>
+              <h2 id="selected-heading">Selected players</h2>
+            </div>
+            <span id="selected-count" class="count">0 players</span>
+          </div>
+
+          <div class="lineup-rule" aria-hidden="true"></div>
+          <div id="selected-players" class="selected-list"></div>
+          <button id="submit-lineup" type="button" disabled>Generate lineup <span aria-hidden="true">→</span></button>
+          <p id="request-status" class="status" role="status"></p>
+          <pre id="request-result" class="result" hidden></pre>
+        </section>
+      </div>
+
+      <footer class="site-footer">
+        <span>Built for the long game</span>
+        <span class="footer-mark" aria-hidden="true">✳</span>
+        <span>Projection engine · PPR scoring</span>
+      </footer>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

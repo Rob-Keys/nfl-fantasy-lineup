@@ -52,7 +52,7 @@ function renderResults(): void {
 
 function renderSelected(): void {
   const chosen = [...selected.values()];
-  selectedCount.textContent = `${chosen.length} selected`;
+  selectedCount.textContent = `${chosen.length} ${chosen.length === 1 ? 'player' : 'players'}`;
   submitButton.disabled = chosen.length === 0;
   selectedList.innerHTML = chosen.length
     ? chosen.map((player) => `
@@ -61,7 +61,7 @@ function renderSelected(): void {
           <button class="remove-button" type="button" data-remove-id="${escapeText(player.id)}">Remove</button>
         </div>
       `).join('')
-    : '<p class="muted">No players selected yet.</p>';
+    : '<p class="muted">Your roster is waiting for its first pick.</p>';
 }
 
 async function loadPlayers(): Promise<void> {
