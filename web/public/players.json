@@ -1,0 +1,17 @@
+[
+  { "id": "josh-allen", "name": "Josh Allen", "position": "QB", "team": "BUF" },
+  { "id": "lamar-jackson", "name": "Lamar Jackson", "position": "QB", "team": "BAL" },
+  { "id": "christian-mccaffrey", "name": "Christian McCaffrey", "position": "RB", "team": "SF" },
+  { "id": "bijan-robinson", "name": "Bijan Robinson", "position": "RB", "team": "ATL" },
+  { "id": "breece-hall", "name": "Breece Hall", "position": "RB", "team": "NYJ" },
+  { "id": "ceedee-lamb", "name": "CeeDee Lamb", "position": "WR", "team": "DAL" },
+  { "id": "justin-jefferson", "name": "Justin Jefferson", "position": "WR", "team": "MIN" },
+  { "id": "tyreek-hill", "name": "Tyreek Hill", "position": "WR", "team": "MIA" },
+  { "id": "ja-marr-chase", "name": "Ja'Marr Chase", "position": "WR", "team": "CIN" },
+  { "id": "travis-kelce", "name": "Travis Kelce", "position": "TE", "team": "KC" },
+  { "id": "sam-laporta", "name": "Sam LaPorta", "position": "TE", "team": "DET" },
+  { "id": "harrison-butker", "name": "Harrison Butker", "position": "K", "team": "KC" },
+  { "id": "justin-tucker", "name": "Justin Tucker", "position": "K", "team": "BAL" },
+  { "id": "49ers-defense", "name": "San Francisco 49ers", "position": "DEF", "team": "SF" },
+  { "id": "ravens-defense", "name": "Baltimore Ravens", "position": "DEF", "team": "BAL" }
+]

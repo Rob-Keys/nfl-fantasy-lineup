@@ -1,0 +1,6 @@
+name = "nfl-fantasy-lineup"
+pages_build_output_dir = "web/dist"
+compatibility_date = "2026-08-23"
+
+# Set BACKEND_API_URL as a Pages Function variable. Set
+# BACKEND_SHARED_SECRET as a Pages secret with `wrangler pages secret put`.

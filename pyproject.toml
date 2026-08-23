@@ -1,0 +1,8 @@
+[project]
+name = "nfl-fantasy-lineup"
+version = "0.1.0"
+description = "On-demand NFL prop aggregation and fantasy lineup optimization"
+requires-python = ">=3.10"
+
+[tool.unittest]
+start-directory = "tests"
