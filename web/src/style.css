@@ -50,7 +50,7 @@ h2 { font-size: clamp(1.55rem, 3vw, 2.2rem); letter-spacing: -.04em; line-height
 input { width: 100%; padding: 14px 16px 14px 42px; border: 1px solid var(--ink); border-radius: 0; color: var(--ink); background: var(--paper); outline: none; }
 input::placeholder { color: #999286; }
 input:focus { border-color: var(--gold); box-shadow: inset 0 -2px 0 var(--gold); }
-.player-list, .selected-list { display: grid; gap: 7px; margin-top: 18px; }
+.player-list, .roster { display: grid; gap: 7px; margin-top: 18px; }
 .player-row, .selected-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 0; color: var(--ink); background: rgba(247, 244, 236, .55); text-align: left; }
 .player-row { cursor: pointer; }
 .player-row::after { content: "+"; color: var(--gold); font-size: 1.25rem; font-weight: 300; }
@@ -60,9 +60,18 @@ small, .muted { color: var(--ink-soft); }
 .player-row small { flex: 0 0 auto; font-size: .74rem; }
 .muted { margin: 16px 0 0; font-size: .8rem; }
 .lineup-rule { height: 1px; margin: -8px 0 4px; background: var(--line); }
-.selected-list { min-height: 170px; }
-.selected-row { background: rgba(241, 238, 230, .65); }
-.selected-row::before { content: ""; width: 6px; height: 6px; flex: 0 0 auto; background: var(--gold); }
+.roster { min-height: 420px; }
+.roster-group + .roster-group { margin-top: 22px; }
+.roster-group-label { margin: 0 0 8px; color: var(--ink-soft); font-size: .68rem; font-weight: 850; letter-spacing: .14em; text-transform: uppercase; }
+.roster-slots { display: grid; gap: 5px; }
+.roster-slot { display: grid; grid-template-columns: 47px minmax(0, 1fr) 23px; align-items: center; gap: 9px; min-height: 43px; padding: 7px 9px; border: 1px solid var(--line); background: rgba(241, 238, 230, .55); }
+.roster-slot-label { color: var(--gold); font-size: .68rem; font-weight: 850; letter-spacing: .08em; }
+.roster-empty { color: #928b7d; font-size: .77rem; font-style: italic; }
+.roster-player { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; }
+.roster-player strong { min-width: 0; overflow: hidden; font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+.roster-player small { flex: 0 0 auto; font-size: .66rem; font-weight: 700; }
+.roster-slot-filled { border-color: var(--gold-light); background: rgba(247, 244, 236, .72); }
+.roster-slot-optional { border-style: dashed; }
 .remove-button { padding: 4px 0 4px 8px; border: 0; color: var(--ink-soft); background: transparent; cursor: pointer; font-size: .73rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .remove-button:hover { color: var(--gold); }
 button#submit-lineup { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 22px; padding: 15px 16px; border: 1px solid var(--ink); border-radius: 0; color: var(--paper); background: var(--ink); cursor: pointer; font-weight: 800; letter-spacing: .04em; text-align: left; }
