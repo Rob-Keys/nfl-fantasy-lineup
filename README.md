@@ -89,7 +89,9 @@ This is a small, standard-library-only Python implementation for an AWS Lambda b
 
 A sportsbook over/under line is a threshold, not a full probability distribution. Odds alone cannot recover a mathematically exact expected stat value. This implementation uses each line as a neutral projected-stat estimate, averages the available books, and exposes the over implied probability as metadata. A later version can improve the estimator by adding alternate lines or a sport-specific distribution model without changing the lineup or scoring modules.
 
-The FanDuel, BetMGM, and DraftKings adapters make the on-demand HTTP request but intentionally leave their response parsers as `NotImplementedError` stubs. Their public layouts/API schemas must be verified before production use. Do not bypass sportsbook terms of service, access controls, robots rules, or rate limits.
+The FanDuel, BetMGM, and DraftKings adapters use the books' public JSON feeds and normalize their different market schemas into the application's `BookProp` model. The adapters support current legacy/new feed variants, player-name matching, over/under prices, and threshold markets such as `2+` (represented as a 1.5 line). Feed access remains subject to sportsbook availability, geography, terms of service, robots rules, and rate limits. A blocked or unavailable book is reported as a warning while available books continue to be used.
+
+Optional environment overrides are available when a sportsbook changes its public routing: `FANDUEL_PUBLIC_API_KEY`, `BETMGM_PUBLIC_ACCESS_ID`, `DRAFTKINGS_NFL_EVENT_GROUP`, and `DRAFTKINGS_SITE_CODE`.
 
 ## Local test/demo
 
