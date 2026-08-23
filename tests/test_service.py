@@ -49,7 +49,7 @@ class ServiceTests(unittest.TestCase):
 
         self.assertEqual(response.projections[0].stats["passing_yards"].value, 290)
 
-    def test_player_without_props_is_not_used_to_fill_a_slot(self):
+    def test_player_without_props_can_fill_a_slot_at_zero_points(self):
         players = [
             {"id": "qb", "name": "Quarterback", "position": "QB"},
             {"id": "rb", "name": "Runner", "position": "RB"},
@@ -68,7 +68,30 @@ class ServiceTests(unittest.TestCase):
         })
 
         self.assertEqual(response.lineup.slots["QB"][0].player.id, "qb")
+        self.assertEqual(response.lineup.total_points, 15.0)
         self.assertTrue(any("Runner" in warning for warning in response.warnings))
+
+    def test_missing_position_props_do_not_make_a_legal_roster_impossible(self):
+        players = [
+            {"id": "qb", "name": "Quarterback", "position": "QB"},
+            {"id": "k", "name": "Kicker", "position": "K"},
+        ]
+        books = {
+            "book-a": StaticSportsbook("book-a", {
+                "qb": [BookProp("qb", "passing_yards", 300)],
+            }),
+        }
+
+        response = FantasyLineupService(books).generate({
+            "players": players,
+            "sportsbooks": ["book-a"],
+            "scoring": {"passing_yards": 0.05},
+            "lineup": {"QB": 1, "K": 1},
+        })
+
+        self.assertEqual(response.lineup.slots["K"][0].player.id, "k")
+        self.assertEqual(response.lineup.slots["K"][0].fantasy_points, 0)
+        self.assertTrue(any("Kicker" in warning for warning in response.warnings))
 
 
 if __name__ == "__main__":

@@ -31,8 +31,12 @@ class FantasyLineupService:
             raise ValueError("No supported props were returned by the requested sportsbooks")
         no_data = [item.player.name for item in projections if not item.stats]
         if no_data:
-            warnings.extend(f"No usable primary props for {name}; excluded from lineup optimization" for name in no_data)
-        optimized = optimize_lineup([item for item in projections if item.stats], lineup)
+            warnings.extend(f"No usable primary props for {name}; projected at 0 points" for name in no_data)
+        # A missing sportsbook market does not make a real roster player
+        # ineligible for a position. score_player intentionally gives such a
+        # player zero points, allowing the optimizer to fill the legal lineup
+        # while preferring any available positive projection.
+        optimized = optimize_lineup(projections, lineup)
         return ProjectionResponse(lineup=optimized, projections=projections, warnings=warnings)
 
 
