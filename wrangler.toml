@@ -4,6 +4,7 @@ compatibility_date = "2026-08-23"
 
 [vars]
 BACKEND_API_URL = "https://w538tpxuya.execute-api.us-east-1.amazonaws.com/default/fantasyLineupGenerator"
+ALLOWED_SITE_ORIGIN = "https://nfl-fantasy-lineup.pages.dev"
 SKIP_DEPENDENCY_INSTALL = "1"
 
 # Set BACKEND_SHARED_SECRET as a Pages secret with

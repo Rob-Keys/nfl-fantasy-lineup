@@ -17,6 +17,7 @@ Build output directory: web/dist
 Configure these Cloudflare Pages Function variables:
 
 - `BACKEND_API_URL`: the deployed API Gateway endpoint
+- `ALLOWED_SITE_ORIGIN`: `https://nfl-fantasy-lineup.pages.dev` in production
 - `BACKEND_SHARED_SECRET`: a secret stored with `wrangler pages secret put`
 
 Configure the Lambda with the same `BACKEND_SHARED_SECRET` value. The Lambda
@@ -48,7 +49,9 @@ If using the GitHub integration, configure the Pages project with the build
 command and output directory above. Functions are discovered from the root
 `functions/` directory automatically. The browser calls `/api/lineup` on the
 Pages origin, so no browser-side backend key or cross-origin API call is
-needed.
+needed. The Pages Function also rejects requests that do not look same-origin.
+Apply rate limiting to the custom domain at the Cloudflare WAF layer; the
+shared `pages.dev` hostname is not a zone owned by this account.
 
 The player catalog in `web/public/players.json` is generated from nflverse's
 2026 roster release. It currently includes active QB, RB, WR, TE, and K players

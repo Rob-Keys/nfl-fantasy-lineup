@@ -11,10 +11,33 @@ function json(body, status = 200) {
   });
 }
 
+function requestLooksLikeItCameFromSite(request, allowedOrigin) {
+  if (!allowedOrigin) return false;
+
+  const origin = request.headers.get('Origin');
+  if (origin) return origin === allowedOrigin;
+
+  if (request.headers.get('Sec-Fetch-Site') === 'same-origin') return true;
+
+  const referer = request.headers.get('Referer');
+  if (!referer) return false;
+
+  try {
+    return new URL(referer).origin === allowedOrigin;
+  } catch {
+    return false;
+  }
+}
+
 export async function onRequestPost(context) {
   const { BACKEND_API_URL, BACKEND_SHARED_SECRET } = context.env;
   if (!BACKEND_API_URL || !BACKEND_SHARED_SECRET) {
     return json({ error: 'Backend proxy is not configured' }, 500);
+  }
+
+  const allowedOrigin = String(context.env.ALLOWED_SITE_ORIGIN || '').replace(/\/$/, '');
+  if (!requestLooksLikeItCameFromSite(context.request, allowedOrigin)) {
+    return json({ error: 'Requests must come from the site' }, 403);
   }
 
   const contentType = context.request.headers.get('content-type') || '';
