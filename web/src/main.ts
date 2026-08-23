@@ -521,7 +521,7 @@ async function submitLineup(): Promise<void> {
         players: [...selected.values()],
         scoring: 'ppr',
         lineup: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1 },
-        sportsbooks: ['fanduel', 'betmgm', 'draftkings']
+        sportsbooks: ['fanduel', 'draftkings']
       })
     });
     const body: unknown = await response.json();

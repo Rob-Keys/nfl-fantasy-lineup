@@ -15,8 +15,6 @@ from __future__ import annotations
 
 import os
 import re
-import threading
-import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from typing import Any
@@ -303,6 +301,15 @@ class Sportsbook(ABC):
         response = self.http_client.get(self.player_url(player))
         return self.parse_player_props(response, player)
 
+    def fetch_players_props(self, players: Iterable[Player]) -> dict[str, list[BookProp]]:
+        """Fetch a fresh provider snapshot for a lineup request.
+
+        Providers with league-wide feeds override this to make one live,
+        request-scoped fetch and parse it for all requested players. Nothing
+        is retained after the call, so a later lineup request gets new lines.
+        """
+        return {player.id: self.fetch_player_props(player) for player in players}
+
     def player_url(self, player: Player) -> str:
         return f"{self.base_url}/player-props/{quote(player.id, safe='')}"
 
@@ -320,13 +327,6 @@ class FanDuelSportsbook(Sportsbook):
     # value omitted the X after PW and returns HTTP 404.
     api_key = os.environ.get("FANDUEL_PUBLIC_API_KEY", "FhMFpcPWXMeyZxOx")
 
-    def __init__(self, http_client: HttpClient | None = None) -> None:
-        super().__init__(http_client)
-        self._cache_lock = threading.RLock()
-        self._content_cache: tuple[float, Mapping[str, Any]] | None = None
-        self._event_cache: dict[str, tuple[float, Mapping[str, Any]]] = {}
-        self._cache_ttl_seconds = 30.0
-
     def player_url(self, player: Player) -> str:
         return self._content_url()
 
@@ -339,30 +339,22 @@ class FanDuelSportsbook(Sportsbook):
         return f"{self.base_url}/api/event-page?{query}"
 
     def _content_page(self) -> Mapping[str, Any]:
-        now = time.monotonic()
-        with self._cache_lock:
-            if self._content_cache and now - self._content_cache[0] < self._cache_ttl_seconds:
-                return self._content_cache[1]
-            response = self.http_client.get(self._content_url())
-            data = decode_json(response)
-            if not isinstance(data, Mapping):
-                raise ValueError("FanDuel content-managed page was not an object")
-            self._content_cache = (now, data)
-            return data
+        data = decode_json(self.http_client.get(self._content_url()))
+        if not isinstance(data, Mapping):
+            raise ValueError("FanDuel content-managed page was not an object")
+        return data
 
     def _event_page(self, event_id: str) -> Mapping[str, Any]:
-        now = time.monotonic()
-        with self._cache_lock:
-            cached = self._event_cache.get(event_id)
-            if cached and now - cached[0] < self._cache_ttl_seconds:
-                return cached[1]
-            data = decode_json(self.http_client.get(self._event_url(event_id)))
-            if not isinstance(data, Mapping):
-                raise ValueError("FanDuel event page was not an object")
-            self._event_cache[event_id] = (now, data)
-            return data
+        data = decode_json(self.http_client.get(self._event_url(event_id)))
+        if not isinstance(data, Mapping):
+            raise ValueError("FanDuel event page was not an object")
+        return data
 
     def fetch_player_props(self, player: Player) -> list[BookProp]:
+        return self.fetch_players_props([player]).get(player.id, [])
+
+    def fetch_players_props(self, players: Iterable[Player]) -> dict[str, list[BookProp]]:
+        players = list(players)
         data = self._content_page()
 
         # The content page also contains season futures. Only follow events
@@ -374,16 +366,14 @@ class FanDuelSportsbook(Sportsbook):
             for event_id, event in events.items()
             if isinstance(event, Mapping) and " @ " in _text(event.get("name"))
         ] if isinstance(events, Mapping) else []
-        props: list[BookProp] = []
+        props_by_player = {player.id: [] for player in players}
         for event_id in event_ids:
             event_data = self._event_page(event_id)
             event_attachments = event_data.get("attachments", {}) if isinstance(event_data, Mapping) else {}
-            props.extend(_parse_market_list(
-                _mapping_values(event_attachments.get("markets")) if isinstance(event_attachments, Mapping) else [],
-                player,
-                self.name,
-            ))
-        return _dedupe_props(props)
+            markets = _mapping_values(event_attachments.get("markets")) if isinstance(event_attachments, Mapping) else []
+            for player in players:
+                props_by_player[player.id].extend(_parse_market_list(markets, player, self.name))
+        return {player_id: _dedupe_props(props) for player_id, props in props_by_player.items()}
 
     def parse_player_props(self, response: HttpResponse, player: Player) -> list[BookProp]:
         data = decode_json(response)
@@ -402,13 +392,6 @@ class DraftKingsSportsbook(Sportsbook):
     base_url = "https://sportsbook-nash.draftkings.com"
     nfl_event_group = os.environ.get("DRAFTKINGS_NFL_EVENT_GROUP", "88808")
     site_code = os.environ.get("DRAFTKINGS_SITE_CODE", "dkusnj")
-
-    def __init__(self, http_client: HttpClient | None = None) -> None:
-        super().__init__(http_client)
-        self._cache_lock = threading.RLock()
-        self._catalog_cache: tuple[float, Mapping[str, Any]] | None = None
-        self._category_cache: dict[str, tuple[float, Mapping[str, Any]]] = {}
-        self._cache_ttl_seconds = 30.0
 
     def player_url(self, player: Player) -> str:
         return f"{self.base_url}/sites/US-SB/api/v5/eventgroups/{quote(self.nfl_event_group, safe='')}?format=json"
@@ -429,20 +412,11 @@ class DraftKingsSportsbook(Sportsbook):
             f"/subcategories/{quote(str(subcategory_id), safe='')}"
         )
 
-    def _cached_json(self, url: str, category_id: str | None = None) -> Mapping[str, Any]:
-        now = time.monotonic()
-        with self._cache_lock:
-            cache = self._catalog_cache if category_id is None else self._category_cache.get(category_id)
-            if cache and now - cache[0] < self._cache_ttl_seconds:
-                return cache[1]
-            data = decode_json(self.http_client.get(url))
-            if not isinstance(data, Mapping):
-                raise ValueError("DraftKings sportscontent response was not an object")
-            if category_id is None:
-                self._catalog_cache = (now, data)
-            else:
-                self._category_cache[category_id] = (now, data)
-            return data
+    def _fetch_json(self, url: str) -> Mapping[str, Any]:
+        data = decode_json(self.http_client.get(url))
+        if not isinstance(data, Mapping):
+            raise ValueError("DraftKings sportscontent response was not an object")
+        return data
 
     def _parse_sportscontent_props(self, data: Mapping[str, Any], player: Player) -> list[BookProp]:
         markets = data.get("markets")
@@ -463,14 +437,15 @@ class DraftKingsSportsbook(Sportsbook):
         return props
 
     def fetch_player_props(self, player: Player) -> list[BookProp]:
-        # The legacy event-group route is commonly 403. The public
-        # sportscontent catalog remains reachable and provides current
-        # category IDs, which change over time.
-        try:
-            catalog = self._cached_json(self._sportscontent_league_url())
-        except Exception:
-            response = self.http_client.get(self.player_url(player))
-            return self.parse_player_props(response, player)
+        return self.fetch_players_props([player]).get(player.id, [])
+
+    def fetch_players_props(self, players: Iterable[Player]) -> dict[str, list[BookProp]]:
+        players = list(players)
+        # The legacy event-group route is commonly rejected by Akamai. Use
+        # the current sportscontent catalog as the canonical live feed and
+        # report its error directly instead of falling back to a known-bad
+        # URL that only obscures the real failure.
+        catalog = self._fetch_json(self._sportscontent_league_url())
 
         categories = catalog.get("categories", [])
         candidate_ids = [
@@ -481,17 +456,15 @@ class DraftKingsSportsbook(Sportsbook):
             and _is_draftkings_prop_category(_text(category.get("name")))
         ] if isinstance(categories, list) else []
 
-        props: list[BookProp] = []
+        props_by_player = {player.id: [] for player in players}
         for category_id in candidate_ids:
             try:
-                data = self._cached_json(
-                    self._sportscontent_category_url(category_id),
-                    category_id,
-                )
-                props.extend(self._parse_sportscontent_props(data, player))
+                data = self._fetch_json(self._sportscontent_category_url(category_id))
+                for player in players:
+                    props_by_player[player.id].extend(self._parse_sportscontent_props(data, player))
             except Exception:
                 continue
-        return _dedupe_props(props)
+        return {player_id: _dedupe_props(props) for player_id, props in props_by_player.items()}
 
     def parse_player_props(self, response: HttpResponse, player: Player) -> list[BookProp]:
         data = decode_json(response)
@@ -587,28 +560,38 @@ class BetMGMSportsbook(Sportsbook):
         return "https://sportsapi.nj.betmgm.com/offer/api/11/us/fixtures?language=en-us"
 
     def fetch_player_props(self, player: Player) -> list[BookProp]:
-        # The first feed is the one used by the public BetMGM site. The
-        # documented Sports API is a compatible fallback for other regions.
-        response = self.http_client.get(self.player_url(player))
-        props = self.parse_player_props(response, player)
-        if props:
-            return props
+        return self.fetch_players_props([player]).get(player.id, [])
+
+    def fetch_players_props(self, players: Iterable[Player]) -> dict[str, list[BookProp]]:
+        players = list(players)
         try:
-            fallback = self.http_client.get(self._official_api_url())
-        except Exception:
-            return props
-        return _dedupe_props(props + self.parse_player_props(fallback, player))
+            data = decode_json(self.http_client.get(self.player_url(players[0])))
+        except Exception as primary_error:
+            try:
+                data = decode_json(self.http_client.get(self._official_api_url()))
+            except Exception:
+                raise primary_error
+        if not isinstance(data, Mapping):
+            raise ValueError("BetMGM fixtures response was not an object")
+        return {
+            player.id: self._parse_fixture_data(data, player)
+            for player in players
+        }
+
+    def _parse_fixture_data(self, data: Mapping[str, Any], player: Player) -> list[BookProp]:
+        fixtures = data.get("fixtures", [])
+        markets: list[Mapping[str, Any]] = []
+        for fixture in fixtures if isinstance(fixtures, list) else []:
+            if isinstance(fixture, Mapping):
+                option_markets = fixture.get("optionMarkets", [])
+                markets.extend(item for item in option_markets if isinstance(item, Mapping))
+        return _dedupe_props(_parse_market_list(markets, player, self.name))
 
     def parse_player_props(self, response: HttpResponse, player: Player) -> list[BookProp]:
         data = decode_json(response)
-        fixtures = data.get("fixtures", []) if isinstance(data, Mapping) else []
-        markets: list[Mapping[str, Any]] = []
-        for fixture in fixtures if isinstance(fixtures, list) else []:
-            if not isinstance(fixture, Mapping):
-                continue
-            option_markets = fixture.get("optionMarkets", [])
-            markets.extend(item for item in option_markets if isinstance(item, Mapping))
-        return _dedupe_props(_parse_market_list(markets, player, self.name))
+        if not isinstance(data, Mapping):
+            raise ValueError("BetMGM fixtures response was not an object")
+        return self._parse_fixture_data(data, player)
 
 
 class StaticSportsbook(Sportsbook):
@@ -659,9 +642,12 @@ def _is_draftkings_prop_category(name: str) -> bool:
 
 
 def default_sportsbooks(http_client: HttpClient | None = None) -> dict[str, Sportsbook]:
+    # BetMGM is intentionally disabled: its public feed rejects our Lambda
+    # egress even though it is reachable from a local browser-like client.
+    # Keep the adapter available for a future authorized integration, but do
+    # not include it in production requests.
     return {
         "fanduel": FanDuelSportsbook(http_client),
-        "betmgm": BetMGMSportsbook(http_client),
         "draftkings": DraftKingsSportsbook(http_client),
     }
 

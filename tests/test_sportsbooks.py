@@ -279,6 +279,36 @@ class SportsbookParserTests(unittest.TestCase):
 
         self.assertEqual(props, [])
 
+    def test_betmgm_fixture_feed_is_fetched_once_per_live_snapshot(self):
+        payload = {
+            "fixtures": [{
+                "optionMarkets": [{
+                    "name": {"value": "Rushing Yards"},
+                    "options": [{
+                        "name": {"value": "Kyren Williams Over"},
+                        "attr": "57.5",
+                        "price": {"americanOdds": "-110"},
+                    }],
+                }],
+            }]
+        }
+
+        class FakeHttpClient:
+            calls = 0
+
+            def get(self, url):
+                self.calls += 1
+                return response(payload)
+
+        client = FakeHttpClient()
+        sportsbook = BetMGMSportsbook(client)
+        player = Player("kyren", "Kyren Williams", "RB")
+
+        result = sportsbook.fetch_players_props([player])
+
+        self.assertEqual(len(result[player.id]), 1)
+        self.assertEqual(client.calls, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

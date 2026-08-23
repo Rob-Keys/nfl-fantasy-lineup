@@ -17,6 +17,8 @@ cp -R "${repo_root}/fantasy_lineup" "${package_dir}/fantasy_lineup"
 (cd "${repo_root}" && python3 -m pip install --quiet --target "${package_dir}" \
   --platform manylinux2014_x86_64 --implementation cp --python-version 3.14 \
   --only-binary=:all: -r requirements.txt)
+test -f "${package_dir}/curl_cffi/__init__.py"
+test -f "${package_dir}/curl_cffi/_wrapper.abi3.so"
 (cd "${package_dir}" && zip -qr "${package_file}" . -x "$(basename "${package_file}")")
 
 aws lambda update-function-configuration \

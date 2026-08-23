@@ -77,7 +77,7 @@ This is a small Python implementation for an AWS Lambda behind API Gateway. It a
     {"id": "josh-allen", "name": "Josh Allen", "position": "QB"},
     {"id": "rb-1", "name": "Example Runner", "position": "RB"}
   ],
-  "sportsbooks": ["fanduel", "betmgm", "draftkings"],
+  "sportsbooks": ["fanduel", "draftkings"],
   "scoring": "ppr",
   "lineup": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "K": 1, "DEF": 1}
 }
@@ -89,7 +89,9 @@ This is a small Python implementation for an AWS Lambda behind API Gateway. It a
 
 A sportsbook over/under line is a threshold, not a full probability distribution. Odds alone cannot recover a mathematically exact expected stat value. This implementation uses each line as a neutral projected-stat estimate, averages the available books, and exposes the over implied probability as metadata. A later version can improve the estimator by adding alternate lines or a sport-specific distribution model without changing the lineup or scoring modules.
 
-The FanDuel, BetMGM, and DraftKings adapters use the books' public JSON feeds and normalize their different market schemas into the application's `BookProp` model. FanDuel game pages are discovered from the NFL content page; season futures are deliberately excluded. DraftKings categories are discovered from its current public sportscontent catalog instead of being hardcoded. The adapters support current legacy/new feed variants, player-name matching, over/under prices, and threshold markets such as `2+` (represented as a 1.5 line). Feed access remains subject to sportsbook availability, geography, terms of service, robots rules, and rate limits. A blocked or unavailable book is reported as a warning while available books continue to be used.
+The FanDuel and DraftKings adapters use the books' public JSON feeds and normalize their different market schemas into the application's `BookProp` model. FanDuel game pages are discovered from the NFL content page; season futures are deliberately excluded. DraftKings categories are discovered from its current public sportscontent catalog instead of being hardcoded. The adapters support current legacy/new feed variants, player-name matching, over/under prices, and threshold markets such as `2+` (represented as a 1.5 line). Feed access remains subject to sportsbook availability, geography, terms of service, robots rules, and rate limits. A blocked or unavailable book is reported as a warning while available books continue to be used. The BetMGM adapter remains in the codebase but is disabled for production requests because its public feed rejects the Lambda egress.
+
+When a player does not have a currently posted sportsbook market, the backend leaves that player's projection at zero and includes a warning. The application does not substitute historical stats or guesses for missing live lines.
 
 Optional environment overrides are available when a sportsbook changes its public routing: `FANDUEL_PUBLIC_API_KEY`, `BETMGM_PUBLIC_ACCESS_ID`, `DRAFTKINGS_NFL_EVENT_GROUP`, and `DRAFTKINGS_SITE_CODE`.
 

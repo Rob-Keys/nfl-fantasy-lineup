@@ -34,24 +34,26 @@ class ProjectionAggregator:
         warnings: list[str] = []
         props_by_player_stat: dict[str, dict[str, list[BookProp]]] = defaultdict(lambda: defaultdict(list))
 
-        # Requests are independent and remain on-demand: one task per
-        # requested player/book pair, with no global player cache.
-        with ThreadPoolExecutor(max_workers=min(self.max_workers, len(players) * len(names))) as pool:
+        # A provider fetches one fresh snapshot per lineup request and parses
+        # it for all requested players. This avoids hammering league-wide
+        # feeds once per player without retaining stale lines between calls.
+        with ThreadPoolExecutor(max_workers=min(self.max_workers, len(names))) as pool:
             futures = {
-                pool.submit(self.sportsbooks[book].fetch_player_props, player): (player, book)
-                for player in players
+                pool.submit(self.sportsbooks[book].fetch_players_props, players): book
                 for book in names
             }
             for future in as_completed(futures):
-                player, book = futures[future]
+                book = futures[future]
                 try:
-                    raw_props = future.result()
-                    for prop in validate_props(raw_props, player):
-                        props_by_player_stat[player.id][prop.stat].append(prop)
+                    raw_props_by_player = future.result()
+                    for player in players:
+                        raw_props = raw_props_by_player.get(player.id, [])
+                        for prop in validate_props(raw_props, player):
+                            props_by_player_stat[player.id][prop.stat].append(prop)
                 except NotImplementedError as exc:
-                    warnings.append(f"{book} parser unavailable for {player.name}: {exc}")
+                    warnings.append(f"{book} parser unavailable: {exc}")
                 except Exception as exc:  # one provider should not erase other books
-                    warnings.append(f"{book} failed for {player.name}: {exc}")
+                    warnings.append(f"{book} failed: {exc}")
 
         result: list[AggregatedPlayerProps] = []
         for player in players:
@@ -103,4 +105,16 @@ def _is_more_primary(candidate: BookProp, current: BookProp) -> bool:
         )
         if candidate_gap != current_gap:
             return candidate_gap < current_gap
+    # Some live feeds expose milestone ladders as one-sided markets (for
+    # example, 20+, 25+, ..., 57+) rather than a normal over/under pair. The
+    # smallest threshold is not the projection; choose the live threshold
+    # closest to an even market instead of silently selecting the lowest rung.
+    if not candidate_complete and not current_complete:
+        candidate_probability = candidate.implied_over_probability
+        current_probability = current.implied_over_probability
+        if candidate_probability is not None and current_probability is not None:
+            candidate_gap = abs(candidate_probability - 0.5)
+            current_gap = abs(current_probability - 0.5)
+            if candidate_gap != current_gap:
+                return candidate_gap < current_gap
     return candidate.line < current.line

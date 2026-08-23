@@ -12,6 +12,7 @@ class Player:
     id: str
     name: str
     position: str
+    team: str | None = None
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,7 @@ def serialize_projection(projection: PlayerProjection) -> dict[str, Any]:
             "id": projection.player.id,
             "name": projection.player.name,
             "position": projection.player.position,
+            **({"team": projection.player.team} if projection.player.team else {}),
         },
         "stats": {
             stat: {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 try:
@@ -35,7 +36,27 @@ class HttpClient:
         self.impersonate = impersonate
 
     def get(self, url: str) -> HttpResponse:
-        headers = {"User-Agent": self.user_agent, "Accept": "text/html,application/json"}
+        headers = {
+            "User-Agent": self.user_agent,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        hostname = (urlsplit(url).hostname or "").lower()
+        if "betmgm.com" in hostname:
+            headers.update({
+                "Origin": "https://www.nj.betmgm.com",
+                "Referer": "https://www.nj.betmgm.com/en/sports",
+            })
+        elif "draftkings.com" in hostname:
+            headers.update({
+                "Origin": "https://sportsbook.draftkings.com",
+                "Referer": "https://sportsbook.draftkings.com/",
+            })
+        elif "fanduel.com" in hostname:
+            headers.update({
+                "Origin": "https://sportsbook.fanduel.com",
+                "Referer": "https://sportsbook.fanduel.com/",
+            })
         if cffi_requests is not None:
             try:
                 response = cffi_requests.get(

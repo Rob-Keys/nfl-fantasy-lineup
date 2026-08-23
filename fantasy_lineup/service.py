@@ -12,6 +12,9 @@ from .scoring import score_player
 from .sportsbooks import Sportsbook, default_sportsbooks
 
 
+DISABLED_SPORTBOOKS = frozenset({"betmgm"})
+
+
 class FantasyLineupService:
     def __init__(self, sportsbooks: dict[str, Sportsbook] | None = None) -> None:
         self.sportsbooks = sportsbooks or default_sportsbooks()
@@ -25,7 +28,14 @@ class FantasyLineupService:
         if not isinstance(sportsbook_names, list) or not all(isinstance(name, str) for name in sportsbook_names):
             raise ValueError("sportsbooks must be an array of names")
 
+        disabled = [name for name in sportsbook_names if name in DISABLED_SPORTBOOKS]
+        sportsbook_names = [name for name in sportsbook_names if name not in DISABLED_SPORTBOOKS]
+        disabled_warnings = [f"{name} is temporarily disabled" for name in disabled]
+        if not sportsbook_names:
+            raise ValueError("No enabled sportsbooks were requested")
+
         aggregated, warnings = self.aggregator.collect(players, sportsbook_names)
+        warnings = disabled_warnings + warnings
         projections = [score_player(item.player, item.stats, scoring) for item in aggregated]
         if not any(item.stats for item in aggregated):
             raise ValueError("No supported props were returned by the requested sportsbooks")
@@ -55,10 +65,11 @@ def parse_players(value: Any) -> list[Player]:
         player_id = str(raw_id).strip()
         name = str(raw_name).strip()
         position = str(raw.get("position", "")).upper().strip()
+        team = str(raw.get("team", "")).upper().strip() or None
         if not player_id or not name or position not in VALID_POSITIONS:
             raise ValueError("Each player requires id, name, and a valid position")
         if player_id in ids:
             raise ValueError(f"Duplicate player id: {player_id}")
         ids.add(player_id)
-        result.append(Player(id=player_id, name=name, position=position))
+        result.append(Player(id=player_id, name=name, position=position, team=team))
     return result
