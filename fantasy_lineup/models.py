@@ -29,6 +29,7 @@ class BookProp:
     over_odds: int | None = None
     under_odds: int | None = None
     source: str = "unknown"
+    is_alternate: bool = False
 
     def __post_init__(self) -> None:
         if isinstance(self.line, bool) or not isinstance(self.line, (int, float)) or not isfinite(float(self.line)):

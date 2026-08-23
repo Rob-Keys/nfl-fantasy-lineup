@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import os
 import re
+import threading
+import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -26,6 +28,7 @@ from .models import BookProp, Player
 
 
 _NUMBER_RE = re.compile(r"[-+]?\d+(?:\.\d+)?")
+_ALTERNATE_RE = re.compile(r"\b(?:alt|alternate|alternative)\b")
 
 
 def _text(value: Any) -> str:
@@ -45,17 +48,6 @@ def _text(value: Any) -> str:
 
 def _normalize(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", " ", _text(value).lower()).strip()
-
-
-def _walk(value: Any) -> Iterator[Mapping[str, Any]]:
-    """Yield every mapping in an arbitrary JSON tree."""
-    if isinstance(value, Mapping):
-        yield value
-        for child in value.values():
-            yield from _walk(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield from _walk(child)
 
 
 def _first(value: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
@@ -140,20 +132,25 @@ def _market_name(node: Mapping[str, Any]) -> str:
 def _stat_for_market(market: str, position: str) -> str | None:
     """Map book-specific market labels to the application's stat vocabulary."""
     value = _normalize(market)
+    if _ALTERNATE_RE.search(value):
+        return None
     # Combination markets cannot be represented by one BookProp.
     if any(token in value for token in ("same game", "combo", "parlay", "combined", "double")):
         return None
 
     rules = (
-        (("passing yards", "pass yards", "pass yds"), "passing_yards"),
+        (("passing yards", "passing yds", "pass yards", "pass yds"), "passing_yards"),
         (("passing touchdowns", "passing touchdown", "pass touchdowns", "pass tds"), "passing_tds"),
         (("interceptions thrown", "passing interceptions", "pass interceptions", "quarterback interceptions"), "interceptions"),
-        (("rushing yards", "rush yards", "rush yds"), "rushing_yards"),
+        (("rushing yards", "rushing yds", "rush yards", "rush yds"), "rushing_yards"),
         (("rushing touchdowns", "rushing touchdown", "rush touchdowns", "rush tds"), "rushing_tds"),
         (("receiving yards", "reception yards", "receiving yds", "rec yards"), "receiving_yards"),
         (("receiving touchdowns", "receiving touchdown", "receiving tds", "rec touchdowns"), "receiving_tds"),
         (("receptions", "pass receptions", "total receptions"), "receptions"),
         (("fumbles lost", "lost fumbles"), "fumbles_lost"),
+        (("field goals made 0 39", "field goals 0 39", "field goals under 40"), "field_goals_0_39"),
+        (("field goals made 40 49", "field goals 40 49"), "field_goals_40_49"),
+        (("field goals made 50", "field goals 50 plus", "field goals over 49"), "field_goals_50_plus"),
         (("field goals made", "field goal made", "made field goals"), "field_goals_made"),
         (("extra points made", "extra point made", "extra points"), "extra_points_made"),
         (("sacks", "defensive sacks", "team sacks"), "defense_sacks"),
@@ -169,12 +166,7 @@ def _stat_for_market(market: str, position: str) -> str | None:
     if value in {"interceptions", "interception", "ints", "int"}:
         return "interceptions" if position == "QB" else "defense_interceptions" if position == "DEF" else None
 
-    # Some pages use a generic touchdown market.
-    if "touchdown" in value or re.search(r"\btds?\b", value):
-        if position in {"WR", "TE"}:
-            return "receiving_tds"
-        if position in {"QB", "RB"}:
-            return "rushing_tds"
+    # Generic touchdown markets do not identify rushing versus receiving.
     return None
 
 
@@ -182,7 +174,21 @@ def _contains_player(value: Any, player: Player) -> bool:
     target = _normalize(player.name)
     if not target:
         return False
-    haystack = " ".join(_normalize(item) for node in _walk(value) for item in node.values())
+    player_fields = (
+        "runnerName", "participant", "participants", "player", "playerName",
+        "name", "label", "selection", "outcome", "description",
+    )
+
+    def field_text(node: Any) -> str:
+        if isinstance(node, Mapping):
+            direct = _text(node)
+            nested = " ".join(field_text(node.get(key)) for key in player_fields if key in node)
+            return f"{direct} {nested}"
+        if isinstance(node, list):
+            return " ".join(field_text(item) for item in node)
+        return _text(node)
+
+    haystack = _normalize(field_text(value))
     if target in haystack:
         return True
     # A few feeds use "last, first" while the catalog uses "first last".
@@ -202,7 +208,13 @@ def _selection_nodes(node: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 
 def _side(node: Mapping[str, Any]) -> str | None:
-    value = _normalize(" ".join(_text(node.get(key)) for key in ("label", "name", "selection", "outcome", "totalsPrefix")))
+    values = [_text(node.get(key)) for key in (
+        "label", "name", "selection", "outcome", "totalsPrefix", "runnerName",
+    )]
+    result = node.get("result")
+    if isinstance(result, Mapping):
+        values.append(_text(result.get("type")))
+    value = _normalize(" ".join(values))
     if re.search(r"\bover\b|\byes?\b", value):
         return "over"
     if re.search(r"\bunder\b|\bno\b", value):
@@ -214,6 +226,11 @@ def _props_from_market(market: Mapping[str, Any], player: Player, source: str) -
     market_text = _market_name(market)
     stat = _stat_for_market(market_text, player.position)
     if stat is None or stat not in STATS_BY_POSITION[player.position]:
+        return []
+
+    normalized_market = _normalize(market_text)
+    if (re.search(r"\b(?:anytime|to score|to record|yes no)\b", normalized_market)
+            or re.search(r"\d+\s*\+", market_text)) and not re.search(r"\b(?:over|under)\b", normalized_market):
         return []
 
     selections = _selection_nodes(market)
@@ -230,6 +247,8 @@ def _props_from_market(market: Mapping[str, Any], player: Player, source: str) -
         if price is None:
             continue
         selection_text = " ".join(_text(selection.get(key)) for key in ("label", "name", "selection", "outcome"))
+        if _ALTERNATE_RE.search(_normalize(selection_text)):
+            continue
         line = _line(selection, f"{market_text} {selection_text}")
         if line is None:
             line = _line(market, market_text)
@@ -253,18 +272,24 @@ def _props_from_market(market: Mapping[str, Any], player: Player, source: str) -
     ]
 
 
-def _parse_market_tree(value: Any, player: Player, source: str) -> list[BookProp]:
+def _parse_market_list(markets: Iterable[Mapping[str, Any]], player: Player, source: str) -> list[BookProp]:
     props: list[BookProp] = []
     seen: set[tuple[str, float, int | None, int | None]] = set()
-    for node in _walk(value):
-        if not any(key in node for key in ("runners", "outcomes", "selections", "options")):
-            continue
-        for prop in _props_from_market(node, player, source):
+    for market in markets:
+        for prop in _props_from_market(market, player, source):
             key = (prop.stat, prop.line, prop.over_odds, prop.under_odds)
             if key not in seen:
                 seen.add(key)
                 props.append(prop)
     return props
+
+
+def _mapping_values(value: Any) -> list[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
+        return [item for item in value.values() if isinstance(item, Mapping)]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, Mapping)]
+    return []
 
 
 class Sportsbook(ABC):
@@ -291,9 +316,21 @@ class FanDuelSportsbook(Sportsbook):
 
     name = "fanduel"
     base_url = "https://sbapi.nj.sportsbook.fanduel.com"
-    api_key = os.environ.get("FANDUEL_PUBLIC_API_KEY", "FhMFpcPWmeyZxOx")
+    # Public application key embedded in FanDuel's frontend. The previous
+    # value omitted the X after PW and returns HTTP 404.
+    api_key = os.environ.get("FANDUEL_PUBLIC_API_KEY", "FhMFpcPWXMeyZxOx")
+
+    def __init__(self, http_client: HttpClient | None = None) -> None:
+        super().__init__(http_client)
+        self._cache_lock = threading.RLock()
+        self._content_cache: tuple[float, Mapping[str, Any]] | None = None
+        self._event_cache: dict[str, tuple[float, Mapping[str, Any]]] = {}
+        self._cache_ttl_seconds = 30.0
 
     def player_url(self, player: Player) -> str:
+        return self._content_url()
+
+    def _content_url(self) -> str:
         query = urlencode({"page": "CUSTOM", "customPageId": "nfl", "_ak": self.api_key})
         return f"{self.base_url}/api/content-managed-page?{query}"
 
@@ -301,24 +338,61 @@ class FanDuelSportsbook(Sportsbook):
         query = urlencode({"eventId": event_id, "tab": "popular", "_ak": self.api_key})
         return f"{self.base_url}/api/event-page?{query}"
 
-    def fetch_player_props(self, player: Player) -> list[BookProp]:
-        response = self.http_client.get(self.player_url(player))
-        data = decode_json(response)
-        props = _parse_market_tree(data, player, self.name)
-        if props:
-            return props
+    def _content_page(self) -> Mapping[str, Any]:
+        now = time.monotonic()
+        with self._cache_lock:
+            if self._content_cache and now - self._content_cache[0] < self._cache_ttl_seconds:
+                return self._content_cache[1]
+            response = self.http_client.get(self._content_url())
+            data = decode_json(response)
+            if not isinstance(data, Mapping):
+                raise ValueError("FanDuel content-managed page was not an object")
+            self._content_cache = (now, data)
+            return data
 
-        # The content-managed page commonly contains only the event index;
-        # player markets are then available on each event's public page.
+    def _event_page(self, event_id: str) -> Mapping[str, Any]:
+        now = time.monotonic()
+        with self._cache_lock:
+            cached = self._event_cache.get(event_id)
+            if cached and now - cached[0] < self._cache_ttl_seconds:
+                return cached[1]
+            data = decode_json(self.http_client.get(self._event_url(event_id)))
+            if not isinstance(data, Mapping):
+                raise ValueError("FanDuel event page was not an object")
+            self._event_cache[event_id] = (now, data)
+            return data
+
+    def fetch_player_props(self, player: Player) -> list[BookProp]:
+        data = self._content_page()
+
+        # The content page also contains season futures. Only follow events
+        # that are actual games; otherwise a 4,000-yard season line could be
+        # mistaken for a weekly passing-yard projection.
         events = data.get("attachments", {}).get("events", {}) if isinstance(data, Mapping) else {}
-        event_ids = list(events)[:32] if isinstance(events, Mapping) else []
+        event_ids = [
+            str(event_id)
+            for event_id, event in events.items()
+            if isinstance(event, Mapping) and " @ " in _text(event.get("name"))
+        ] if isinstance(events, Mapping) else []
+        props: list[BookProp] = []
         for event_id in event_ids:
-            event_response = self.http_client.get(self._event_url(str(event_id)))
-            props.extend(_parse_market_tree(decode_json(event_response), player, self.name))
+            event_data = self._event_page(event_id)
+            event_attachments = event_data.get("attachments", {}) if isinstance(event_data, Mapping) else {}
+            props.extend(_parse_market_list(
+                _mapping_values(event_attachments.get("markets")) if isinstance(event_attachments, Mapping) else [],
+                player,
+                self.name,
+            ))
         return _dedupe_props(props)
 
     def parse_player_props(self, response: HttpResponse, player: Player) -> list[BookProp]:
-        return _parse_market_tree(decode_json(response), player, self.name)
+        data = decode_json(response)
+        attachments = data.get("attachments", {}) if isinstance(data, Mapping) else {}
+        return _parse_market_list(
+            _mapping_values(attachments.get("markets")) if isinstance(attachments, Mapping) else [],
+            player,
+            self.name,
+        )
 
 
 class DraftKingsSportsbook(Sportsbook):
@@ -329,11 +403,24 @@ class DraftKingsSportsbook(Sportsbook):
     nfl_event_group = os.environ.get("DRAFTKINGS_NFL_EVENT_GROUP", "88808")
     site_code = os.environ.get("DRAFTKINGS_SITE_CODE", "dkusnj")
 
+    def __init__(self, http_client: HttpClient | None = None) -> None:
+        super().__init__(http_client)
+        self._cache_lock = threading.RLock()
+        self._catalog_cache: tuple[float, Mapping[str, Any]] | None = None
+        self._category_cache: dict[str, tuple[float, Mapping[str, Any]]] = {}
+        self._cache_ttl_seconds = 30.0
+
     def player_url(self, player: Player) -> str:
         return f"{self.base_url}/sites/US-SB/api/v5/eventgroups/{quote(self.nfl_event_group, safe='')}?format=json"
 
     def _sportscontent_league_url(self) -> str:
         return f"{self.base_url}/api/sportscontent/{self.site_code}/v1/leagues/{quote(self.nfl_event_group, safe='')}"
+
+    def _sportscontent_category_url(self, category_id: Any) -> str:
+        return (
+            f"{self.base_url}/api/sportscontent/{self.site_code}/v1/leagues/"
+            f"{quote(self.nfl_event_group, safe='')}/categories/{quote(str(category_id), safe='')}"
+        )
 
     def _sportscontent_subcategory_url(self, category_id: Any, subcategory_id: Any) -> str:
         return (
@@ -342,51 +429,101 @@ class DraftKingsSportsbook(Sportsbook):
             f"/subcategories/{quote(str(subcategory_id), safe='')}"
         )
 
+    def _cached_json(self, url: str, category_id: str | None = None) -> Mapping[str, Any]:
+        now = time.monotonic()
+        with self._cache_lock:
+            cache = self._catalog_cache if category_id is None else self._category_cache.get(category_id)
+            if cache and now - cache[0] < self._cache_ttl_seconds:
+                return cache[1]
+            data = decode_json(self.http_client.get(url))
+            if not isinstance(data, Mapping):
+                raise ValueError("DraftKings sportscontent response was not an object")
+            if category_id is None:
+                self._catalog_cache = (now, data)
+            else:
+                self._category_cache[category_id] = (now, data)
+            return data
+
+    def _parse_sportscontent_props(self, data: Mapping[str, Any], player: Player) -> list[BookProp]:
+        markets = data.get("markets")
+        selections = data.get("selections")
+        if not isinstance(markets, list) or not isinstance(selections, list):
+            return []
+        by_market: dict[str, list[Mapping[str, Any]]] = {}
+        for selection in selections:
+            if isinstance(selection, Mapping):
+                by_market.setdefault(str(selection.get("marketId")), []).append(selection)
+        props: list[BookProp] = []
+        for market in markets:
+            if not isinstance(market, Mapping):
+                continue
+            container = dict(market)
+            container["outcomes"] = by_market.get(str(market.get("id")), [])
+            props.extend(_props_from_market(container, player, self.name))
+        return props
+
+    def fetch_player_props(self, player: Player) -> list[BookProp]:
+        # The legacy event-group route is commonly 403. The public
+        # sportscontent catalog remains reachable and provides current
+        # category IDs, which change over time.
+        try:
+            catalog = self._cached_json(self._sportscontent_league_url())
+        except Exception:
+            response = self.http_client.get(self.player_url(player))
+            return self.parse_player_props(response, player)
+
+        categories = catalog.get("categories", [])
+        candidate_ids = [
+            str(category.get("id"))
+            for category in categories
+            if isinstance(category, Mapping)
+            and category.get("id") != 492
+            and _is_draftkings_prop_category(_text(category.get("name")))
+        ] if isinstance(categories, list) else []
+
+        props: list[BookProp] = []
+        for category_id in candidate_ids:
+            try:
+                data = self._cached_json(
+                    self._sportscontent_category_url(category_id),
+                    category_id,
+                )
+                props.extend(self._parse_sportscontent_props(data, player))
+            except Exception:
+                continue
+        return _dedupe_props(props)
+
     def parse_player_props(self, response: HttpResponse, player: Player) -> list[BookProp]:
         data = decode_json(response)
-        props = _parse_market_tree(data, player, self.name)
+        props: list[BookProp] = []
 
         # The legacy event-group endpoint nests offers below a descriptor
         # whose name is the actual market (for example "Passing Yards").
         # Preserve that descriptor while parsing each offer's outcomes.
-        for container in _walk(data):
-            descriptors = container.get("offerSubcategoryDescriptors")
-            if not isinstance(descriptors, list):
-                continue
-            for descriptor in descriptors:
+        event_group = data.get("eventGroup", {}) if isinstance(data, Mapping) else {}
+        categories = event_group.get("offerCategories", []) if isinstance(event_group, Mapping) else []
+        for category in categories if isinstance(categories, list) else []:
+            descriptors = category.get("offerSubcategoryDescriptors", []) if isinstance(category, Mapping) else []
+            for descriptor in descriptors if isinstance(descriptors, list) else []:
                 if not isinstance(descriptor, Mapping):
                     continue
                 market_name = _text(_first(descriptor, ("name", "label", "subcategoryName")))
                 subcategory = descriptor.get("offerSubcategory")
                 offers = subcategory.get("offers") if isinstance(subcategory, Mapping) else descriptor.get("offers")
-                if not isinstance(offers, list):
-                    continue
-                for group in offers:
+                for group in offers if isinstance(offers, list) else []:
                     entries = group if isinstance(group, list) else [group]
                     for offer in entries:
-                        if not isinstance(offer, Mapping):
-                            continue
-                        outcomes = offer.get("outcomes")
-                        if not isinstance(outcomes, (list, Mapping)):
-                            continue
-                        market = {"marketName": market_name, "outcomes": outcomes}
-                        props.extend(_props_from_market(market, player, self.name))
+                        if isinstance(offer, Mapping) and isinstance(offer.get("outcomes"), (list, Mapping)):
+                            props.extend(_props_from_market(
+                                {"marketName": market_name, "outcomes": offer["outcomes"]},
+                                player,
+                                self.name,
+                            ))
 
         # Newer sportscontent responses split markets and selections into
         # sibling arrays instead of nesting outcomes under each offer.
         if isinstance(data, Mapping):
-            markets = data.get("markets")
-            selections = data.get("selections")
-            if isinstance(markets, list) and isinstance(selections, list):
-                by_market: dict[str, list[Mapping[str, Any]]] = {}
-                for selection in selections:
-                    if isinstance(selection, Mapping):
-                        by_market.setdefault(str(selection.get("marketId")), []).append(selection)
-                for market in markets:
-                    if isinstance(market, Mapping):
-                        container = dict(market)
-                        container["outcomes"] = by_market.get(str(market.get("id")), [])
-                        props.extend(_props_from_market(container, player, self.name))
+            props.extend(self._parse_sportscontent_props(data, player))
         if props:
             return _dedupe_props(props)
 
@@ -463,7 +600,15 @@ class BetMGMSportsbook(Sportsbook):
         return _dedupe_props(props + self.parse_player_props(fallback, player))
 
     def parse_player_props(self, response: HttpResponse, player: Player) -> list[BookProp]:
-        return _dedupe_props(_parse_market_tree(decode_json(response), player, self.name))
+        data = decode_json(response)
+        fixtures = data.get("fixtures", []) if isinstance(data, Mapping) else []
+        markets: list[Mapping[str, Any]] = []
+        for fixture in fixtures if isinstance(fixtures, list) else []:
+            if not isinstance(fixture, Mapping):
+                continue
+            option_markets = fixture.get("optionMarkets", [])
+            markets.extend(item for item in option_markets if isinstance(item, Mapping))
+        return _dedupe_props(_parse_market_list(markets, player, self.name))
 
 
 class StaticSportsbook(Sportsbook):
@@ -483,6 +628,7 @@ class StaticSportsbook(Sportsbook):
                 over_odds=prop.over_odds,
                 under_odds=prop.under_odds,
                 source=self.name,
+                is_alternate=prop.is_alternate,
             )
             for prop in self.props_by_player.get(player.id, [])
         ]
@@ -500,6 +646,16 @@ def _dedupe_props(props: Iterable[BookProp]) -> list[BookProp]:
             seen.add(key)
             result.append(prop)
     return result
+
+
+def _is_draftkings_prop_category(name: str) -> bool:
+    normalized = _normalize(name)
+    if any(token in normalized for token in (
+        "future", "season", "award", "leader", "division", "conference", "playoff",
+        "team", "special", "record", "rookie",
+    )):
+        return False
+    return any(token in normalized for token in ("player", "prop", "scorer", "milestone", "matchup"))
 
 
 def default_sportsbooks(http_client: HttpClient | None = None) -> dict[str, Sportsbook]:

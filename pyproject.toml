@@ -3,6 +3,7 @@ name = "nfl-fantasy-lineup"
 version = "0.1.0"
 description = "On-demand NFL prop aggregation and fantasy lineup optimization"
 requires-python = ">=3.10"
+dependencies = ["curl-cffi>=0.13.0"]
 
 [tool.unittest]
 start-directory = "tests"

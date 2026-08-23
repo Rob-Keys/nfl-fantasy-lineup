@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy the standard-library Lambda package and keep its timeout below the
+# Deploy the Lambda package and keep its timeout below the
 # API Gateway HTTP API integration timeout.
 AWS_REGION="${AWS_REGION:-us-east-1}"
 LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:-fantasyLineupGenerator}"
@@ -14,7 +14,10 @@ package_file="${package_dir}/lambda.zip"
 trap 'rm -rf "${package_dir}"' EXIT
 
 cp -R "${repo_root}/fantasy_lineup" "${package_dir}/fantasy_lineup"
-(cd "${package_dir}" && zip -qr "${package_file}" fantasy_lineup)
+(cd "${repo_root}" && python3 -m pip install --quiet --target "${package_dir}" \
+  --platform manylinux2014_x86_64 --implementation cp --python-version 3.14 \
+  --only-binary=:all: -r requirements.txt)
+(cd "${package_dir}" && zip -qr "${package_file}" . -x "$(basename "${package_file}")")
 
 aws lambda update-function-configuration \
   --region "${AWS_REGION}" \

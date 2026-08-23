@@ -53,6 +53,94 @@ class SportsbookParserTests(unittest.TestCase):
         self.assertEqual(props[0].under_odds, -125)
         self.assertEqual(props[0].player_id, self.player.id)
 
+    def test_fanduel_fetch_uses_game_pages_and_ignores_season_futures(self):
+        content_url = FanDuelSportsbook().player_url(self.player)
+        event_url = FanDuelSportsbook()._event_url("game-1")
+        payloads = {
+            content_url: {
+                "attachments": {
+                    "events": {
+                        "game-1": {"name": "San Francisco 49ers @ Los Angeles Rams"},
+                        "future-1": {"name": "NFL Futures"},
+                    },
+                    "markets": {
+                        "future-market": {
+                            "marketName": "Josh Allen Regular Season Passing Yds 2026-27",
+                            "eventId": "future-1",
+                            "runners": [{
+                                "runnerName": "Josh Allen Over",
+                                "handicap": 4000.5,
+                                "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "-110"}},
+                            }],
+                        },
+                    },
+                },
+            },
+            event_url: {
+                "attachments": {
+                    "markets": {
+                        "game-market": {
+                            "marketName": "Josh Allen - Passing Yds",
+                            "runners": [
+                                {
+                                    "runnerName": "Josh Allen Over",
+                                    "handicap": 250.5,
+                                    "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "-110"}},
+                                },
+                                {
+                                    "runnerName": "Josh Allen Under",
+                                    "handicap": 250.5,
+                                    "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+100"}},
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+        }
+
+        class FakeHttpClient:
+            def get(self, url):
+                return response(payloads[url])
+
+        props = FanDuelSportsbook(FakeHttpClient()).fetch_player_props(self.player)
+
+        self.assertEqual(len(props), 1)
+        self.assertEqual(props[0].line, 250.5)
+        self.assertEqual(props[0].over_odds, -110)
+        self.assertEqual(props[0].under_odds, 100)
+
+    def test_draftkings_fetch_discovers_current_public_category_ids(self):
+        sportsbook = DraftKingsSportsbook()
+        league_url = sportsbook._sportscontent_league_url()
+        category_url = sportsbook._sportscontent_category_url(1003)
+        payloads = {
+            league_url: {"categories": [
+                {"id": 492, "name": "Game Lines"},
+                {"id": 1003, "name": "Player Props"},
+            ]},
+            category_url: {
+                "markets": [{"id": "market-1", "name": "Passing Yards"}],
+                "selections": [{
+                    "marketId": "market-1",
+                    "label": "Over 250.5",
+                    "points": 250.5,
+                    "participants": [{"name": "Josh Allen"}],
+                    "displayOdds": {"american": "-110"},
+                }],
+            },
+        }
+
+        class FakeHttpClient:
+            def get(self, url):
+                return response(payloads[url])
+
+        props = DraftKingsSportsbook(FakeHttpClient()).fetch_player_props(self.player)
+
+        self.assertEqual(len(props), 1)
+        self.assertEqual(props[0].stat, "passing_yards")
+        self.assertEqual(props[0].line, 250.5)
+
     def test_draftkings_legacy_event_group_descriptor_is_used(self):
         payload = {
             "eventGroup": {
@@ -172,10 +260,24 @@ class SportsbookParserTests(unittest.TestCase):
 
         props = FanDuelSportsbook().parse_player_props(response(payload), self.player)
 
-        self.assertEqual(len(props), 1)
-        self.assertEqual(props[0].stat, "rushing_yards")
-        self.assertEqual(props[0].line, 1.5)
-        self.assertEqual(props[0].over_odds, -115)
+        self.assertEqual(props, [])
+
+    def test_alternate_market_is_ignored(self):
+        payload = {
+            "marketName": "Alternate Passing Yards",
+            "runners": [
+                {
+                    "runnerName": "Josh Allen",
+                    "label": "Over",
+                    "handicap": 300.5,
+                    "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+110"}},
+                }
+            ],
+        }
+
+        props = FanDuelSportsbook().parse_player_props(response(payload), self.player)
+
+        self.assertEqual(props, [])
 
 
 if __name__ == "__main__":

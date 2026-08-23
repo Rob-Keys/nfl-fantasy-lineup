@@ -29,7 +29,10 @@ class FantasyLineupService:
         projections = [score_player(item.player, item.stats, scoring) for item in aggregated]
         if not any(item.stats for item in aggregated):
             raise ValueError("No supported props were returned by the requested sportsbooks")
-        optimized = optimize_lineup(projections, lineup)
+        no_data = [item.player.name for item in projections if not item.stats]
+        if no_data:
+            warnings.extend(f"No usable primary props for {name}; excluded from lineup optimization" for name in no_data)
+        optimized = optimize_lineup([item for item in projections if item.stats], lineup)
         return ProjectionResponse(lineup=optimized, projections=projections, warnings=warnings)
 
 

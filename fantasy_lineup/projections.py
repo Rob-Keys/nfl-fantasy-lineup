@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Iterable
 
-from .models import BookProp, Player, ProjectedStat
+from .models import BookProp, Player, ProjectedStat, american_odds_probability
 from .sportsbooks import Sportsbook, validate_props
 
 
@@ -58,16 +58,49 @@ class ProjectionAggregator:
             stats: dict[str, ProjectedStat] = {}
             for stat, props in props_by_player_stat[player.id].items():
                 if props:
+                    # A book contributes one main line per stat. Explicitly
+                    # marked alternate props are ignored; the balance check
+                    # handles feeds that return several unlabelled lines.
+                    primary_by_source: dict[str, BookProp] = {}
+                    for prop in props:
+                        if prop.is_alternate:
+                            continue
+                        current = primary_by_source.get(prop.source)
+                        if current is None or _is_more_primary(prop, current):
+                            primary_by_source[prop.source] = prop
+                    primary_props = list(primary_by_source.values())
+                    if not primary_props:
+                        continue
                     probabilities = [
                         probability
-                        for probability in (prop.implied_over_probability for prop in props)
+                        for probability in (prop.implied_over_probability for prop in primary_props)
                         if probability is not None
                     ]
                     stats[stat] = ProjectedStat(
                         stat=stat,
-                        value=sum(prop.line for prop in props) / len(props),
-                        sources=tuple(sorted({prop.source for prop in props})),
+                        value=sum(prop.line for prop in primary_props) / len(primary_props),
+                        sources=tuple(sorted({prop.source for prop in primary_props})),
                         market_over_probability=sum(probabilities) / len(probabilities) if probabilities else None,
                     )
             result.append(AggregatedPlayerProps(player=player, stats=stats))
         return result, sorted(warnings)
+
+
+def _is_more_primary(candidate: BookProp, current: BookProp) -> bool:
+    """Select the conventional main line when a feed leaves lines unlabelled."""
+    candidate_complete = candidate.over_odds is not None and candidate.under_odds is not None
+    current_complete = current.over_odds is not None and current.under_odds is not None
+    if candidate_complete != current_complete:
+        return candidate_complete
+    if candidate_complete and current_complete:
+        candidate_gap = abs(
+            candidate.implied_over_probability
+            - american_odds_probability(candidate.under_odds)
+        )
+        current_gap = abs(
+            current.implied_over_probability
+            - american_odds_probability(current.under_odds)
+        )
+        if candidate_gap != current_gap:
+            return candidate_gap < current_gap
+    return candidate.line < current.line
