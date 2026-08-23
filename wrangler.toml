@@ -2,5 +2,8 @@ name = "nfl-fantasy-lineup"
 pages_build_output_dir = "web/dist"
 compatibility_date = "2026-08-23"
 
-# Set BACKEND_API_URL as a Pages Function variable. Set
-# BACKEND_SHARED_SECRET as a Pages secret with `wrangler pages secret put`.
+[vars]
+BACKEND_API_URL = "https://w538tpxuya.execute-api.us-east-1.amazonaws.com/default/fantasyLineupGenerator"
+
+# Set BACKEND_SHARED_SECRET as a Pages secret with
+# `wrangler pages secret put BACKEND_SHARED_SECRET`.

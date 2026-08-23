@@ -2,6 +2,7 @@
 // Cloudflare Pages Function environment variables, never in the frontend.
 
 const MAX_BODY_BYTES = 128 * 1024;
+const MAX_RESPONSE_BYTES = 256 * 1024;
 
 function json(body, status = 200) {
   return Response.json(body, {
@@ -37,16 +38,30 @@ export async function onRequestPost(context) {
     return json({ error: 'Request body must be a JSON object' }, 400);
   }
 
-  const upstream = await fetch(BACKEND_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Internal-Api-Key': BACKEND_SHARED_SECRET
-    },
-    body: JSON.stringify(parsed)
-  });
+  let upstream;
+  try {
+    upstream = await fetch(BACKEND_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Api-Key': BACKEND_SHARED_SECRET
+      },
+      body: JSON.stringify(parsed)
+    });
+  } catch {
+    return json({ error: 'Backend request failed' }, 502);
+  }
 
-  const responseBody = await upstream.text();
+  const contentLength = Number(upstream.headers.get('Content-Length') || 0);
+  if (contentLength > MAX_RESPONSE_BYTES) {
+    return json({ error: 'Backend response is too large' }, 502);
+  }
+
+  const responseBody = await upstream.arrayBuffer();
+  if (responseBody.byteLength > MAX_RESPONSE_BYTES) {
+    return json({ error: 'Backend response is too large' }, 502);
+  }
+
   return new Response(responseBody, {
     status: upstream.status,
     headers: {

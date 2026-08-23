@@ -8,6 +8,7 @@ env/
 .env
 .env.*
 !.env.example
+.backend-secret
 node_modules/
 web/dist/
 .wrangler/
