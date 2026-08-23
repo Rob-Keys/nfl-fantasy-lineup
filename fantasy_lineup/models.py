@@ -20,8 +20,8 @@ class BookProp:
     """A single book's prop line.
 
     A single line is a market threshold, not a statistically complete
-    distribution. The default estimator therefore uses the line as a neutral
-    expected-stat baseline and retains odds as market metadata.
+    distribution. The projection layer uses the line as the baseline and the
+    available prices to move that baseline toward the more likely side.
     """
 
     player_id: str
@@ -46,6 +46,27 @@ class BookProp:
         if self.over_odds is None:
             return None
         return american_odds_probability(self.over_odds)
+
+    @property
+    def fair_over_probability(self) -> float | None:
+        """Estimate the over probability after removing two-sided vig.
+
+        A one-sided market has no opposing price with which to remove vig, so
+        its available implied probability is used as the best estimate.
+        """
+        over = self.implied_over_probability
+        under = (
+            american_odds_probability(self.under_odds)
+            if self.under_odds is not None
+            else None
+        )
+        if over is not None and under is not None:
+            return over / (over + under)
+        if over is not None:
+            return over
+        if under is not None:
+            return 1.0 - under
+        return None
 
 
 @dataclass(frozen=True)

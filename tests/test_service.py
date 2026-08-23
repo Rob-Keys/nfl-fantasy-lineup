@@ -21,12 +21,12 @@ class ServiceTests(unittest.TestCase):
             "scoring": {"passing_yards": 0.05},
             "lineup": {"QB": 1},
         })
-        self.assertEqual(response.projections[0].stats["passing_yards"].value, 290)
+        self.assertAlmostEqual(response.projections[0].stats["passing_yards"].value, 290.2380952381)
         self.assertAlmostEqual(
             response.projections[0].stats["passing_yards"].market_over_probability,
             (100 / 210 + 110 / 210) / 2,
         )
-        self.assertEqual(response.projections[0].fantasy_points, 14.5)
+        self.assertAlmostEqual(response.projections[0].fantasy_points, 14.5119047619)
         self.assertEqual(response.lineup.slots["QB"][0].player.id, "qb")
 
     def test_only_one_primary_line_per_book_is_averaged(self):
@@ -47,7 +47,7 @@ class ServiceTests(unittest.TestCase):
             "lineup": {"QB": 1},
         })
 
-        self.assertEqual(response.projections[0].stats["passing_yards"].value, 290)
+        self.assertAlmostEqual(response.projections[0].stats["passing_yards"].value, 290)
 
     def test_player_without_props_can_fill_a_slot_at_zero_points(self):
         players = [

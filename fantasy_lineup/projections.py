@@ -7,8 +7,38 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Iterable
 
-from .models import BookProp, Player, ProjectedStat, american_odds_probability
+from .models import BookProp, Player, ProjectedStat
 from .sportsbooks import Sportsbook, validate_props
+
+
+# These markets are effectively occurrence markets when their conventional
+# line is 0.5: the expected count is approximately the probability of one or
+# more occurrences. This is especially important for fumbles, interceptions,
+# and defensive touchdowns, where using 0.5 regardless of price is misleading.
+_OCCURRENCE_STATS = frozenset({
+    "passing_tds", "rushing_tds", "receiving_tds", "fumbles_lost",
+    "interceptions", "defense_interceptions", "defense_fumble_recoveries",
+    "defense_tds", "extra_points_made",
+})
+
+
+def odds_adjusted_value(prop: BookProp) -> float:
+    """Turn a prop threshold and its price into a practical expectation.
+
+    Sportsbook odds identify the probability of clearing a threshold, but do
+    not identify the full distribution beyond it. For occurrence markets at
+    0.5, use that probability directly. For other markets, apply a
+    deliberately conservative proportional shift around the posted line:
+    ``line * (0.5 + fair_over_probability)``. Thus a neutral market leaves
+    the existing line unchanged, while a market priced 60% to go over moves
+    the estimate up by 10%. Missing prices retain the old line-only fallback.
+    """
+    probability = prop.fair_over_probability
+    if probability is None:
+        return prop.line
+    if prop.stat in _OCCURRENCE_STATS and prop.line == 0.5:
+        return probability
+    return prop.line * (0.5 + probability)
 
 
 @dataclass(frozen=True)
@@ -75,12 +105,12 @@ class ProjectionAggregator:
                         continue
                     probabilities = [
                         probability
-                        for probability in (prop.implied_over_probability for prop in primary_props)
+                        for probability in (prop.fair_over_probability for prop in primary_props)
                         if probability is not None
                     ]
                     stats[stat] = ProjectedStat(
                         stat=stat,
-                        value=sum(prop.line for prop in primary_props) / len(primary_props),
+                        value=sum(odds_adjusted_value(prop) for prop in primary_props) / len(primary_props),
                         sources=tuple(sorted({prop.source for prop in primary_props})),
                         market_over_probability=sum(probabilities) / len(probabilities) if probabilities else None,
                     )
@@ -96,12 +126,10 @@ def _is_more_primary(candidate: BookProp, current: BookProp) -> bool:
         return candidate_complete
     if candidate_complete and current_complete:
         candidate_gap = abs(
-            candidate.implied_over_probability
-            - american_odds_probability(candidate.under_odds)
+            candidate.fair_over_probability - 0.5
         )
         current_gap = abs(
-            current.implied_over_probability
-            - american_odds_probability(current.under_odds)
+            current.fair_over_probability - 0.5
         )
         if candidate_gap != current_gap:
             return candidate_gap < current_gap
@@ -110,8 +138,8 @@ def _is_more_primary(candidate: BookProp, current: BookProp) -> bool:
     # smallest threshold is not the projection; choose the live threshold
     # closest to an even market instead of silently selecting the lowest rung.
     if not candidate_complete and not current_complete:
-        candidate_probability = candidate.implied_over_probability
-        current_probability = current.implied_over_probability
+        candidate_probability = candidate.fair_over_probability
+        current_probability = current.fair_over_probability
         if candidate_probability is not None and current_probability is not None:
             candidate_gap = abs(candidate_probability - 0.5)
             current_gap = abs(current_probability - 0.5)
